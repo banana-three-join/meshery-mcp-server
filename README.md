@@ -27,15 +27,16 @@ It is an official [Meshery Extension](https://meshery.io/extensions), written in
 ## Project status
 
 > [!NOTE]
-> **Early development.** The project scaffold is in place, but the MCP server itself is not implemented yet: the binary currently loads and validates its configuration, logs a startup line, and exits.
+> **Early development.** The MCP server runs over stdio, but it does not call Meshery yet: its tools are placeholders that return a "not implemented" error.
 
 | Area | Status |
 |---|---|
 | Configuration (env vars, config file), logging, Meshery-style errors | ✅ Done |
 | Build, lint, tests, container image, CI | ✅ Done |
-| MCP server over stdio | Planned |
+| MCP server over stdio | ✅ Done |
 | Meshery API client | Planned |
-| MCP tools, resources and prompts | Planned |
+| MCP tools | Placeholders (return "not implemented") |
+| MCP resources and prompts | Planned |
 
 ### Planned scope
 
@@ -67,11 +68,13 @@ These will be exposed through MCP's three building blocks:
 │                                                              │
 │ cmd/meshery-mcp-server  entrypoint: flags, logger, wiring    │
 │ internal/config         settings from env vars and file      │
+│ internal/auth           attaches the caller's token per call │
+│ internal/mcp-server     MCP server over stdio                │
 │                                                              │
-│ internal/tools          MCP tools          (planned)         │
+│ internal/tools          MCP tools          (placeholders)    │
 │ internal/resources      MCP resources      (planned)         │
 │ internal/prompts        MCP prompts        (planned)         │
-│ internal/meshery        Meshery API client (planned)         │
+│ internal/meshery        Meshery API client (stubbed)         │
 │                                                              │
 │ logs go to stderr; stdout is reserved for the protocol       │
 └──────────────────────────────────────────────────────────────┘
@@ -98,7 +101,9 @@ meshery-mcp-server/
 ├── helpers/
 │   └── component_info.json     # Error-code metadata for Meshery's errorutil
 ├── internal/
+│   ├── auth/                   # Per-request credentials
 │   ├── config/                 # Configuration loading and validation
+│   ├── mcp-server/             # MCP server construction and transport
 │   ├── meshery/                # Meshery API client
 │   ├── prompts/                # MCP prompts
 │   ├── resources/              # MCP resources
@@ -136,7 +141,7 @@ The server works with no configuration if Meshery runs at `http://localhost:9081
 | Variable | Default | Purpose |
 |---|---|---|
 | `MESHERY_SERVER_URL` | `http://localhost:9081` | Meshery server to connect to |
-| `MESHERY_API_TOKEN` | *(none)* | Meshery provider token |
+| `MESHERY_API_TOKEN` | *(none)* | Meshery provider token. Environment only; never in the config file |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
 
 To use a config file instead:
@@ -156,11 +161,13 @@ make run
 make run ARGS="--config config.local.yaml"
 ```
 
-Today this prints a startup line to stderr and exits:
+This prints a startup line to stderr, then serves MCP over stdin/stdout until stdin closes or you press Ctrl+C:
 
 ```text
 time="..." level=info msg="starting meshery-mcp-server version=... commit=... meshery_url=http://localhost:9081 token_configured=false" app=meshery-mcp-server
 ```
+
+To call the tools by hand, use the MCP Inspector: `npx @modelcontextprotocol/inspector ./bin/meshery-mcp-server`.
 
 ### 4. Run in a container
 
@@ -173,7 +180,7 @@ This builds the image and runs it over stdio. Inside a container, `localhost` re
 ### 5. Connect an MCP client
 
 > [!NOTE]
-> This becomes useful once the MCP server is implemented.
+> The tools are placeholders for now: every call returns a "not implemented" error, and their descriptions say so.
 
 MCP clients start the server themselves. For example, in Claude Desktop's configuration:
 
@@ -210,7 +217,7 @@ Point the client at the binary or at `docker run -i ...`, never at `make`: Make 
 
 Every pull request runs three CI jobs: **golangci-lint**, **Build and unit tests** (tidy check, build, tests with coverage), and **Test Docker Image Build** (builds the image and starts it). Run `make lint` and `make coverage` before opening one.
 
-Errors follow Meshery's [error conventions](https://docs.meshery.io/project/contributing/contributing-error): each package defines its errors in `error.go` with `"replace_me"` codes, which Meshery's `errorutil` tool replaces with real ones. To check your errors locally:
+Errors follow Meshery's [error conventions](https://docs.meshery.io/project/contributing/contributing-error): each package defines its errors in `error.go`, with codes `meshery-mcp-server-<number>`. To add an error, use the `next_error_code` in [`helpers/component_info.json`](helpers/component_info.json) and increase it, so no number is used twice. To check your errors locally:
 
 ```sh
 go run github.com/meshery/meshkit/cmd/errorutil -d . analyze -i ./helpers -o ./helpers

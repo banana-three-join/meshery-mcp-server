@@ -21,7 +21,7 @@ func writeConfigFile(t *testing.T, content string) string {
 }
 
 func TestLoad(t *testing.T) {
-	const fileYAML = "meshery:\n  url: https://file.example:9081\n  token: file-token\nlog:\n  level: warn\n"
+	const fileYAML = "meshery:\n  url: https://file.example:9081\nlog:\n  level: warn\n"
 
 	tests := []struct {
 		name      string
@@ -39,9 +39,9 @@ func TestLoad(t *testing.T) {
 		{name: "env overrides default", envURL: "https://env.example", envToken: "env-token", envLevel: "debug",
 			wantURL: "https://env.example", wantToken: "env-token", wantLevel: LogLevelDebug},
 		{name: "file only", fileYAML: fileYAML,
-			wantURL: "https://file.example:9081", wantToken: "file-token", wantLevel: LogLevelWarn},
-		{name: "env beats file per key", fileYAML: fileYAML, envURL: "https://env.example",
-			wantURL: "https://env.example", wantToken: "file-token", wantLevel: LogLevelWarn},
+			wantURL: "https://file.example:9081", wantLevel: LogLevelWarn},
+		{name: "env beats file per key", fileYAML: fileYAML, envURL: "https://env.example", envToken: "env-token",
+			wantURL: "https://env.example", wantToken: "env-token", wantLevel: LogLevelWarn},
 		{name: "log level is case-insensitive", envLevel: " DEBUG ",
 			wantURL: defaultMesheryURL, wantLevel: LogLevelDebug},
 		{name: "repo config_example.yml loads", path: filepath.Join("..", "..", "config_example.yml"),
@@ -51,6 +51,14 @@ func TestLoad(t *testing.T) {
 		{name: "unparsable URL", envURL: "http://u:p@host:90x81", wantErr: "Invalid Meshery server URL"},
 		{name: "invalid log level", envLevel: "verbose", wantErr: "Invalid log level"},
 		{name: "missing file", path: filepath.Join(t.TempDir(), "nope.yaml"), wantErr: "Unable to read the config file"},
+
+		// Token
+		{name: "token from the environment", envToken: "env-token",
+			wantURL: defaultMesheryURL, wantToken: "env-token", wantLevel: LogLevelInfo},
+		{name: "token under meshery in file", fileYAML: "meshery:\n  token: file-token\n",
+			wantErr: "Token is not allowed in the config file"},
+		{name: "token under auth in file", fileYAML: "auth:\n  token: file-token\n",
+			wantErr: "Token is not allowed in the config file"},
 	}
 
 	for _, tt := range tests {
@@ -78,8 +86,8 @@ func TestLoad(t *testing.T) {
 			if cfg.Meshery.URL != tt.wantURL {
 				t.Errorf("URL = %q, want %q", cfg.Meshery.URL, tt.wantURL)
 			}
-			if cfg.Meshery.Token != tt.wantToken {
-				t.Errorf("Token = %q, want %q", string(cfg.Meshery.Token), string(tt.wantToken))
+			if cfg.Auth.Token != tt.wantToken {
+				t.Errorf("Auth.Token = %q, want %q", string(cfg.Auth.Token), string(tt.wantToken))
 			}
 			if cfg.Log.Level != tt.wantLevel {
 				t.Errorf("Log.Level = %q, want %q", cfg.Log.Level, tt.wantLevel)
@@ -103,8 +111,44 @@ func TestInvalidURLErrorDoesNotLeakCredentials(t *testing.T) {
 	}
 }
 
+func TestTokenErrorsDoNotLeakToken(t *testing.T) {
+	t.Setenv(envMesheryURL, "")
+	t.Setenv(envLogLevel, "")
+	t.Setenv(envMesheryToken, "super-secret")
+
+	_, err := Load(writeConfigFile(t, "meshery:\n  token: file-secret\n"))
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	for _, secret := range []string{"super-secret", "file-secret"} {
+		if strings.Contains(err.Error(), secret) {
+			t.Errorf("token leaked into error: %v", err)
+		}
+	}
+}
+
+func TestRedactedURL(t *testing.T) {
+	tests := []struct {
+		url  string
+		want string
+	}{
+		{url: "http://localhost:9081", want: "http://localhost:9081"},
+		{url: "https://admin:s3cret@meshery.example", want: "https://admin:xxxxx@meshery.example"},
+		{url: "http://u:p@host:90x81", want: "<unparsable URL>"},
+	}
+	for _, tt := range tests {
+		got := MesheryConfig{URL: tt.url}.RedactedURL()
+		if got != tt.want {
+			t.Errorf("RedactedURL(%q) = %q, want %q", tt.url, got, tt.want)
+		}
+	}
+}
+
 func TestSecretIsRedacted(t *testing.T) {
-	cfg := Config{Meshery: MesheryConfig{URL: "http://x", Token: "super-secret"}}
+	cfg := Config{
+		Meshery: MesheryConfig{URL: "http://x"},
+		Auth:    AuthConfig{Token: "super-secret"},
+	}
 	b, err := json.Marshal(cfg)
 	if err != nil {
 		t.Fatal(err)

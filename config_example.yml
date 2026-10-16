@@ -6,17 +6,15 @@
 #
 # Every setting is optional. Precedence, lowest to highest:
 #   built-in defaults  <  this file  <  environment variables
+#
+# The Meshery token is never read from this file. Set MESHERY_API_TOKEN in
+# the environment; a token in this file stops the server at startup.
 
 meshery:
   # Meshery server to talk to.            Env: MESHERY_SERVER_URL
   # Inside a container, localhost is the container itself; use
   # http://host.docker.internal:9081 to reach Meshery on the host.
   url: http://localhost:9081
-
-  # Meshery provider token.               Env: MESHERY_API_TOKEN
-  # Prefer the environment variable. If you put the token here, keep the
-  # file private (chmod 600) and never commit it.
-  # token: <your-meshery-token>
 
 log:
   # One of: debug, info, warn, error.     Env: LOG_LEVEL

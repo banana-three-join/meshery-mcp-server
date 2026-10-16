@@ -7,10 +7,11 @@ import (
 )
 
 const (
-	ErrReadConfigFileCode    = "replace_me"
-	ErrDecodeConfigCode      = "replace_me"
-	ErrInvalidMesheryURLCode = "replace_me"
-	ErrInvalidLogLevelCode   = "replace_me"
+	ErrReadConfigFileCode    = "meshery-mcp-server-1010"
+	ErrDecodeConfigCode      = "meshery-mcp-server-1011"
+	ErrInvalidMesheryURLCode = "meshery-mcp-server-1012"
+	ErrInvalidLogLevelCode   = "meshery-mcp-server-1013"
+	ErrTokenInConfigFileCode = "meshery-mcp-server-1014" //nolint:gosec // G101: error code, not a credential
 )
 
 // ErrReadConfigFile is returned when the --config file cannot be read or parsed.
@@ -48,4 +49,14 @@ func ErrInvalidLogLevel(level string) error {
 		[]string{fmt.Sprintf("Log level %q is not supported", level)},
 		[]string{"LOG_LEVEL or log.level has a typo"},
 		[]string{"Set LOG_LEVEL to one of: debug, info, warn, error"})
+}
+
+// ErrTokenInConfigFile is returned when the config file contains a token.
+// The token is read from MESHERY_API_TOKEN only.
+func ErrTokenInConfigFile(key string) error {
+	return errors.New(ErrTokenInConfigFileCode, errors.Alert,
+		[]string{"Token is not allowed in the config file"},
+		[]string{fmt.Sprintf("The config file sets %q", key)},
+		[]string{"The token was put in the config file, which is no longer supported"},
+		[]string{"Remove the token from the config file and set MESHERY_API_TOKEN instead"})
 }
