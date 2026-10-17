@@ -17,7 +17,7 @@ func TestRelationshipSummary(t *testing.T) {
 		RelationshipType: "parent",
 		SubType:          "inventory",
 		Model:            modelv1beta1.ModelReference{Name: "kubernetes"},
-		Metadata:         &relationshipv1alpha3.Relationship_Metadata{Description: &description},
+		Metadata:         &relationshipv1alpha3.RelationshipMetadata{Description: &description},
 	}
 
 	got := relationshipSummary(r)

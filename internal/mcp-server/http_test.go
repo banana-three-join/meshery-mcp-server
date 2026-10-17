@@ -142,8 +142,9 @@ func TestHTTP_RejectsUntrustedRequests(t *testing.T) {
 }
 
 // postJSON sends body to endpoint with the access key and the headers a
-// Streamable HTTP client sends, plus extra.
-func postJSON(t *testing.T, endpoint, body string, extra http.Header) *http.Response {
+// Streamable HTTP client sends, plus extra. It closes the response and
+// returns its status code and headers.
+func postJSON(t *testing.T, endpoint, body string, extra http.Header) (int, http.Header) {
 	t.Helper()
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, endpoint, strings.NewReader(body))
 	if err != nil {
@@ -159,8 +160,8 @@ func postJSON(t *testing.T, endpoint, body string, extra http.Header) *http.Resp
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
-	t.Cleanup(func() { _ = resp.Body.Close() })
-	return resp
+	defer func() { _ = resp.Body.Close() }()
+	return resp.StatusCode, resp.Header
 }
 
 func TestHTTP_Stateless(t *testing.T) {
@@ -184,33 +185,33 @@ func TestHTTP_Stateless(t *testing.T) {
 	})
 
 	t.Run("2025-11-25 initialize gets no session", func(t *testing.T) {
-		resp := postJSON(t, endpoint,
+		status, header := postJSON(t, endpoint,
 			`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}`, nil)
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, want %d", status, http.StatusOK)
 		}
-		if id := resp.Header.Get("Mcp-Session-Id"); id != "" {
+		if id := header.Get("Mcp-Session-Id"); id != "" {
 			t.Errorf("Mcp-Session-Id = %q, want none", id)
 		}
 	})
 
 	t.Run("2026-07-28 header mismatch is rejected", func(t *testing.T) {
-		resp := postJSON(t, endpoint,
+		status, _ := postJSON(t, endpoint,
 			`{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}`,
 			http.Header{"Mcp-Protocol-Version": {"2026-07-28"}, "Mcp-Method": {"tools/call"}})
-		if resp.StatusCode != http.StatusBadRequest {
-			t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+		if status != http.StatusBadRequest {
+			t.Errorf("status = %d, want %d", status, http.StatusBadRequest)
 		}
 	})
 
 	t.Run("responses are not buffered by proxies", func(t *testing.T) {
-		resp := postJSON(t, endpoint,
+		status, header := postJSON(t, endpoint,
 			`{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}`,
 			http.Header{"Mcp-Protocol-Version": {"2026-07-28"}, "Mcp-Method": {"tools/list"}})
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, want %d", status, http.StatusOK)
 		}
-		if got := resp.Header.Get("X-Accel-Buffering"); got != "no" {
+		if got := header.Get("X-Accel-Buffering"); got != "no" {
 			t.Errorf("X-Accel-Buffering = %q, want %q", got, "no")
 		}
 	})
@@ -221,7 +222,7 @@ func TestRequireAccessKey_SchemeIsCaseInsensitive(t *testing.T) {
 	h := requireAccessKey(testAccessKey, ok)
 
 	for _, auth := range []string{"Bearer " + testAccessKey, "bearer " + testAccessKey, "BEARER " + testAccessKey} {
-		req := httptest.NewRequest(http.MethodPost, HTTPPath, nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, HTTPPath, nil)
 		req.Header.Set("Authorization", auth)
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, req)
