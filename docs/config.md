@@ -13,6 +13,7 @@ meshery-mcp-server reads its configuration once, at startup. To change a setting
 | HTTP port | `--port` | `MESHERY_MCP_PORT` | `transport.port` | `8080` | `1`–`65535` |
 | HTTP access key | | `MESHERY_MCP_ACCESS_KEY` | *(not allowed)* | *(none)* | At least 32 characters; required for `http` |
 | Log level | | `LOG_LEVEL` | `log.level` | `info` | `debug`, `info`, `warn`, `error` (case-insensitive) |
+| Log format | | `LOG_FORMAT` | `log.format` | `text` | `text`, `json` (case-insensitive) |
 
 The **Meshery server URL** is the address of the Meshery server this MCP server sends requests to. It is not an address this server listens on.
 
@@ -65,6 +66,7 @@ transport:
 
 log:
   level: info
+  format: text
 ```
 
 To start your own, copy the example to a gitignored name:
@@ -213,6 +215,23 @@ Logs are written to **stderr**. Stdout is reserved for MCP protocol messages, so
 | `warn` | Warnings and errors only |
 | `error` | Errors only |
 
+`LOG_FORMAT` controls the shape of each line:
+
+| Format | Use it for | Example |
+|---|---|---|
+| `text` | Development: easy to read in a terminal (default) | `time="2026-10-16T23:56:59-04:00" level=info msg="server run start" app=meshery-mcp-server` |
+| `json` | Production: one JSON object per line, for log collectors | `{"app":"meshery-mcp-server","level":"info","msg":"server run start","time":"2026-10-16T23:56:59-04:00"}` |
+
+Every line has the same four fields, `time`, `level`, `msg` and `app`, whether the server or the MCP SDK wrote it. Errors also carry `code`, `severity`, `short-description`, `probable-cause` and `suggested-remediation`.
+
+At startup the server logs what it offers to MCP clients:
+
+```text
+level=info msg="registered capabilities" tools="[search_components get_component list_models get_model list_relationships]" resources=[] prompts=[]
+```
+
+An error in the configuration itself is logged as `text` at `info` level, because the configured format and level are not known until the configuration has loaded.
+
 ## Errors
 
 Configuration problems and HTTP listen failures stop the server at startup; a slow HTTP shutdown is reported when the server stops. Each error is logged with a short description, the probable cause and a suggested fix.
@@ -232,6 +251,7 @@ Configuration problems and HTTP listen failures stop the server at startup; a sl
 | `meshery-mcp-server-1020` | Unable to listen for HTTP connections | The port is in use or the address is unavailable | Pick a free port or stop the process using it |
 | `meshery-mcp-server-1021` | HTTP access key is required | `RunHTTP` was called without an access key (config validation normally catches this first) | Set `MESHERY_MCP_ACCESS_KEY` |
 | `meshery-mcp-server-1022` | HTTP server did not shut down cleanly | Requests were still running when the 5-second shutdown timeout ended | None needed; remaining connections were closed |
+| `meshery-mcp-server-1023` | Invalid log format | `LOG_FORMAT` / `log.format` is not a supported format | Use `text` or `json` |
 
 Logs and error messages never include the token, the access key, or any password embedded in the URL: the startup line logs the URL with the password replaced by `xxxxx`.
 
@@ -245,7 +265,7 @@ Error codes follow Meshery's conventions (`meshery-mcp-server-<number>`).
 - `main` parses the flags, passes only the ones given on the command line to `config.Load` as `config.Flags`, and passes plain values to the packages that need them. Other packages never read configuration themselves.
 - `internal/mcp-server` knows nothing about `config`: `main` picks `RunStdio` or `RunHTTP` from `config.Transport` and builds `mcpserver.HTTPOptions`.
 - `config.Meshery` says where Meshery is; `config.Auth` says who is calling. They are kept apart on purpose: the Meshery client gets only the URL, and `auth.Resolver` turns `config.Auth` into a function the MCP server runs on every request to attach the caller's token to the request's `context`. The Meshery client reads it from there with `meshery.TokenFromContext`. Nothing built at startup holds a token, except that function when a token is set.
-- The log level is stored as a plain name (`"info"`, …), independent of any logging library. `main` translates it for meshkit's logger in one function, `logrusLevel`.
+- The log level and format are stored as plain names (`"info"`, `"json"`, …), independent of any logging library. `internal/logging` turns them into the MeshKit logger the server uses and the `slog` logger the MCP SDK takes, both writing the same fields.
 - The token is a `config.Secret`, which redacts itself when printed or JSON-encoded. Convert it with `string(token)` only where it is actually used.
 
 ### Adding a setting

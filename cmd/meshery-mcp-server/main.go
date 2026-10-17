@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log/slog"
 	"net"
 	"os"
 	"os/signal"
@@ -12,10 +11,10 @@ import (
 	"syscall"
 
 	"github.com/meshery/meshkit/logger"
-	"github.com/sirupsen/logrus"
 
 	"github.com/meshery-extensions/meshery-mcp-server/internal/auth"
 	"github.com/meshery-extensions/meshery-mcp-server/internal/config"
+	"github.com/meshery-extensions/meshery-mcp-server/internal/logging"
 	mcpserver "github.com/meshery-extensions/meshery-mcp-server/internal/mcp-server"
 	"github.com/meshery-extensions/meshery-mcp-server/internal/meshery"
 )
@@ -29,23 +28,23 @@ var (
 )
 
 func main() {
-	log, err := logger.New(appName, logger.Options{
-		Format:   logger.SyslogLogFormat,
-		LogLevel: int(logrus.InfoLevel),
-		Output:   os.Stderr, // stdout is reserved for the MCP protocol
-	})
+	// Until the config is loaded, log as text at info level. Logs go to
+	// stderr: over stdio, stdout carries the MCP protocol.
+	boot, _, err := logging.New(appName, config.LogFormatText, config.LogLevelInfo, os.Stderr)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 
-	if err := run(log); err != nil {
+	if log, err := run(boot); err != nil {
 		log.Error(err)
 		os.Exit(1)
 	}
 }
 
-func run(log logger.Handler) error {
+// run returns the logger to report its error with: the boot logger if the
+// config could not be loaded, the configured logger otherwise.
+func run(boot logger.Handler) (logger.Handler, error) {
 	configPath := flag.String("config", "", "path to a YAML config file (optional)")
 	transport := flag.String("transport", "", "stdio or http (default stdio; env MESHERY_MCP_TRANSPORT)")
 	host := flag.String("host", "", "http only: loopback address to listen on (default 127.0.0.1; env MESHERY_MCP_HOST)")
@@ -67,9 +66,12 @@ func run(log logger.Handler) error {
 
 	cfg, err := config.Load(*configPath, flags)
 	if err != nil {
-		return err
+		return boot, err
 	}
-	log.SetLevel(logrusLevel(cfg.Log.Level))
+	log, sdkLog, err := logging.New(appName, cfg.Log.Format, cfg.Log.Level, os.Stderr)
+	if err != nil {
+		return boot, err
+	}
 
 	log.Infof("starting %s version=%s commit=%s meshery_url=%s token_configured=%t transport=%s",
 		appName, version, commitsha, cfg.Meshery.RedactedURL(), cfg.Auth.Token != "", cfg.Transport.Mode)
@@ -86,7 +88,7 @@ func run(log logger.Handler) error {
 	opts := mcpserver.Options{
 		Name:        appName,
 		Version:     version,
-		Logger:      slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slogLevel(cfg.Log.Level)})),
+		Logger:      sdkLog,
 		Registry:    meshery.NewRegistry(meshery.NewClient(cfg.Meshery.URL)),
 		Credentials: auth.Resolver(cfg.Auth),
 	}
@@ -101,34 +103,8 @@ func run(log logger.Handler) error {
 		err = mcpserver.RunStdio(ctx, opts)
 	}
 	if err != nil {
-		return err
+		return log, err
 	}
 	log.Info("stopped")
-	return nil
-}
-
-func logrusLevel(level string) logrus.Level {
-	switch level {
-	case config.LogLevelDebug:
-		return logrus.DebugLevel
-	case config.LogLevelWarn:
-		return logrus.WarnLevel
-	case config.LogLevelError:
-		return logrus.ErrorLevel
-	default:
-		return logrus.InfoLevel
-	}
-}
-
-func slogLevel(level string) slog.Level {
-	switch level {
-	case config.LogLevelDebug:
-		return slog.LevelDebug
-	case config.LogLevelWarn:
-		return slog.LevelWarn
-	case config.LogLevelError:
-		return slog.LevelError
-	default:
-		return slog.LevelInfo
-	}
+	return log, nil
 }

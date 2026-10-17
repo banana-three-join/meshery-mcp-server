@@ -38,8 +38,18 @@ func newServer(opts Options) (*mcp.Server, error) {
 	if opts.Credentials != nil {
 		server.AddReceivingMiddleware(credentialsMiddleware(opts.Credentials))
 	}
-	if err := tools.Register(server, opts.Registry); err != nil {
+	toolNames, err := tools.Register(server, opts.Registry)
+	if err != nil {
 		return nil, err
+	}
+	if opts.Logger != nil {
+		// Resources and prompts are listed so the line keeps one shape once
+		// they exist; nothing registers them yet.
+		opts.Logger.Info("registered capabilities",
+			"tools", toolNames,
+			"resources", []string{},
+			"prompts", []string{},
+		)
 	}
 	return server, nil
 }

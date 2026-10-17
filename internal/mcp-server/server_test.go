@@ -1,11 +1,14 @@
 package mcpserver
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"maps"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -110,6 +113,36 @@ func TestNewServer_RequiresRegistry(t *testing.T) {
 	if _, err := newServer(Options{Name: "test"}); err == nil {
 		t.Fatal("want error for missing registry, got nil")
 	}
+}
+
+func TestNewServer_LogsCapabilities(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+
+	if _, err := newServer(Options{Name: "test", Registry: &fakeRegistry{}, Logger: logger}); err != nil {
+		t.Fatalf("newServer: %v", err)
+	}
+
+	for _, line := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
+		var entry struct {
+			Msg       string   `json:"msg"`
+			Tools     []string `json:"tools"`
+			Resources []string `json:"resources"`
+			Prompts   []string `json:"prompts"`
+		}
+		if err := json.Unmarshal([]byte(line), &entry); err != nil || entry.Msg != "registered capabilities" {
+			continue
+		}
+		want := []string{"search_components", "get_component", "list_models", "get_model", "list_relationships"}
+		if !slices.Equal(entry.Tools, want) {
+			t.Errorf("tools = %v, want %v", entry.Tools, want)
+		}
+		if entry.Resources == nil || entry.Prompts == nil {
+			t.Errorf("want resources and prompts listed (empty), got %v and %v", entry.Resources, entry.Prompts)
+		}
+		return
+	}
+	t.Fatalf("no \"registered capabilities\" line in log output:\n%s", buf.String())
 }
 
 func TestCapabilities_OnlyTools(t *testing.T) {

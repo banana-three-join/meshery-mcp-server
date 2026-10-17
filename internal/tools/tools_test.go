@@ -108,7 +108,7 @@ func connect(t *testing.T, r Registry, protocolVersion string) *mcp.ClientSessio
 	ctx := context.Background()
 
 	s := newServer()
-	if err := Register(s, r); err != nil {
+	if _, err := Register(s, r); err != nil {
 		t.Fatalf("Register: %v", err)
 	}
 
@@ -140,11 +140,22 @@ func TestRegister_RequiresDependencies(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := Register(tt.server, tt.registry)
+			_, err := Register(tt.server, tt.registry)
 			if err == nil || errors.GetSDescription(err) != tt.wantErr {
 				t.Fatalf("want error %q, got %v", tt.wantErr, err)
 			}
 		})
+	}
+}
+
+func TestRegister_ReturnsToolNames(t *testing.T) {
+	names, err := Register(newServer(), &fakeRegistry{})
+	if err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	want := []string{"search_components", "get_component", "list_models", "get_model", "list_relationships"}
+	if !slices.Equal(names, want) {
+		t.Errorf("names = %v, want %v", names, want)
 	}
 }
 

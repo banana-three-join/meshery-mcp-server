@@ -23,9 +23,9 @@ func componentToolset(r ComponentRegistry) toolset {
 	h := &componentHandler{registry: r}
 	return toolset{
 		name: "components",
-		tools: []func(*mcp.Server){
-			func(s *mcp.Server) { mcp.AddTool(s, searchComponentsTool, h.searchComponents) },
-			func(s *mcp.Server) { mcp.AddTool(s, getComponentTool, h.getComponent) },
+		tools: []toolEntry{
+			newToolEntry(searchComponentsTool, h.searchComponents),
+			newToolEntry(getComponentTool, h.getComponent),
 		},
 	}
 }

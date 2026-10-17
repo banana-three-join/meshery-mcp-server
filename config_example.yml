@@ -36,3 +36,5 @@ transport:
 log:
   # One of: debug, info, warn, error.     Env: LOG_LEVEL
   level: info
+  # text (development) or json (log collectors).   Env: LOG_FORMAT
+  format: text

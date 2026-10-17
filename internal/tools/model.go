@@ -28,9 +28,9 @@ func modelToolset(r ModelRegistry) toolset {
 	h := &modelHandler{registry: r}
 	return toolset{
 		name: "models",
-		tools: []func(*mcp.Server){
-			func(s *mcp.Server) { mcp.AddTool(s, listModelsTool, h.listModels) },
-			func(s *mcp.Server) { mcp.AddTool(s, getModelTool, h.getModel) },
+		tools: []toolEntry{
+			newToolEntry(listModelsTool, h.listModels),
+			newToolEntry(getModelTool, h.getModel),
 		},
 	}
 }

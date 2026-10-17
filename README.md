@@ -70,6 +70,7 @@ These will be exposed through MCP's three building blocks:
 │                                                              │
 │ cmd/meshery-mcp-server  entrypoint: flags, logger, wiring    │
 │ internal/config         settings from env vars and file      │
+│ internal/logging        one log format for server and SDK    │
 │ internal/auth           attaches the caller's token per call │
 │ internal/mcp-server     MCP server over stdio or HTTP        │
 │                                                              │
@@ -105,6 +106,7 @@ meshery-mcp-server/
 ├── internal/
 │   ├── auth/                   # Per-request credentials
 │   ├── config/                 # Configuration loading and validation
+│   ├── logging/                # Log format and level for the server and the MCP SDK
 │   ├── mcp-server/             # MCP server construction and transport
 │   ├── meshery/                # Meshery API client
 │   ├── prompts/                # MCP prompts
@@ -149,6 +151,7 @@ The server works with no configuration if Meshery runs at `http://localhost:9081
 | `MESHERY_MCP_PORT` | `8080` | HTTP only; also `--port` |
 | `MESHERY_MCP_ACCESS_KEY` | *(none)* | HTTP only, required: the bearer token clients must send. Environment only |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
+| `LOG_FORMAT` | `text` | `text` for development, `json` for log collectors |
 
 To use a config file instead:
 

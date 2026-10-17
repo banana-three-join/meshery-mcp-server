@@ -67,6 +67,7 @@ func TestLoad(t *testing.T) {
 			t.Setenv(envMesheryURL, tt.envURL)
 			t.Setenv(envMesheryToken, tt.envToken)
 			t.Setenv(envLogLevel, tt.envLevel)
+			t.Setenv(envLogFormat, "")
 			clearTransportEnv(t)
 
 			path := tt.path
@@ -162,6 +163,7 @@ func TestLoad_Transport(t *testing.T) {
 			t.Setenv(envMesheryURL, "")
 			t.Setenv(envMesheryToken, "")
 			t.Setenv(envLogLevel, "")
+			t.Setenv(envLogFormat, "")
 			t.Setenv(envTransportMode, tt.envMode)
 			t.Setenv(envTransportHost, tt.envHost)
 			t.Setenv(envTransportPort, tt.envPort)
@@ -194,6 +196,7 @@ func TestAccessKeyErrorsDoNotLeakKey(t *testing.T) {
 	t.Setenv(envMesheryURL, "")
 	t.Setenv(envMesheryToken, "")
 	t.Setenv(envLogLevel, "")
+	t.Setenv(envLogFormat, "")
 	http := "http"
 
 	t.Run("too short", func(t *testing.T) {
@@ -214,6 +217,7 @@ func TestAccessKeyErrorsDoNotLeakKey(t *testing.T) {
 func TestInvalidURLErrorDoesNotLeakCredentials(t *testing.T) {
 	t.Setenv(envMesheryToken, "")
 	t.Setenv(envLogLevel, "")
+	t.Setenv(envLogFormat, "")
 	clearTransportEnv(t)
 	for _, raw := range []string{"http://admin:s3cret@host:90x81", "ftp://admin:s3cret@host"} {
 		t.Setenv(envMesheryURL, raw)
@@ -230,6 +234,7 @@ func TestInvalidURLErrorDoesNotLeakCredentials(t *testing.T) {
 func TestTokenErrorsDoNotLeakToken(t *testing.T) {
 	t.Setenv(envMesheryURL, "")
 	t.Setenv(envLogLevel, "")
+	t.Setenv(envLogFormat, "")
 	t.Setenv(envMesheryToken, "super-secret")
 	clearTransportEnv(t)
 
@@ -274,5 +279,50 @@ func TestSecretIsRedacted(t *testing.T) {
 		if strings.Contains(out, "super-secret") {
 			t.Errorf("token leaked: %s", out)
 		}
+	}
+}
+
+func TestLoad_LogFormat(t *testing.T) {
+	tests := []struct {
+		name     string
+		env      string
+		fileYAML string
+		want     string
+		wantErr  string
+	}{
+		{name: "defaults to text", want: LogFormatText},
+		{name: "json from env, case-insensitive", env: " JSON ", want: LogFormatJSON},
+		{name: "json from file", fileYAML: "log:\n  format: json\n", want: LogFormatJSON},
+		{name: "env beats file", env: "text", fileYAML: "log:\n  format: json\n", want: LogFormatText},
+		{name: "invalid format", env: "xml", wantErr: "Invalid log format"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(envMesheryURL, "")
+			t.Setenv(envMesheryToken, "")
+			t.Setenv(envLogLevel, "")
+			t.Setenv(envLogFormat, "")
+			t.Setenv(envLogFormat, tt.env)
+			clearTransportEnv(t)
+
+			path := ""
+			if tt.fileYAML != "" {
+				path = writeConfigFile(t, tt.fileYAML)
+			}
+
+			cfg, err := Load(path, Flags{})
+			if tt.wantErr != "" {
+				if err == nil || errors.GetSDescription(err) != tt.wantErr {
+					t.Fatalf("want error %q, got %v", tt.wantErr, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if cfg.Log.Format != tt.want {
+				t.Errorf("Log.Format = %q, want %q", cfg.Log.Format, tt.want)
+			}
+		})
 	}
 }

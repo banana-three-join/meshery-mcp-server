@@ -17,6 +17,7 @@ const (
 	ErrInvalidPortCode           = "meshery-mcp-server-1017"
 	ErrAccessKeyRequiredCode     = "meshery-mcp-server-1018"
 	ErrAccessKeyInConfigFileCode = "meshery-mcp-server-1019"
+	ErrInvalidLogFormatCode      = "meshery-mcp-server-1023"
 )
 
 // ErrReadConfigFile is returned when the --config file cannot be read or parsed.
@@ -113,4 +114,13 @@ func ErrAccessKeyRequired() error {
 		[]string{fmt.Sprintf("The http transport needs %s with at least %d characters", envAccessKey, MinAccessKeyLength)},
 		[]string{"Any process on this machine can reach a loopback address, so HTTP clients must prove they are allowed to call the server"},
 		[]string{fmt.Sprintf("Set %s to a random value, for example the output of: openssl rand -hex 32", envAccessKey)})
+}
+
+// ErrInvalidLogFormat is returned when LOG_FORMAT / log.format is not a supported format.
+func ErrInvalidLogFormat(format string) error {
+	return errors.New(ErrInvalidLogFormatCode, errors.Alert,
+		[]string{"Invalid log format"},
+		[]string{fmt.Sprintf("Log format %q is not supported", format)},
+		[]string{"LOG_FORMAT or log.format has a typo"},
+		[]string{"Set LOG_FORMAT to text or json"})
 }

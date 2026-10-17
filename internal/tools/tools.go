@@ -30,24 +30,44 @@ const notImplementedNote = "Not implemented yet: always returns an error."
 
 type toolset struct {
 	name  string
-	tools []func(*mcp.Server)
+	tools []toolEntry
 }
 
-// Register adds every tool to s.
-func Register(s *mcp.Server, r Registry) error {
+// toolEntry pairs a tool's metadata with the call that adds it to a server.
+// The add func hides the handler's In and Out type parameters, so tools with
+// different types fit in one slice.
+type toolEntry struct {
+	tool *mcp.Tool
+	add  func(*mcp.Server)
+}
+
+// newToolEntry returns the toolEntry for tool t handled by h.
+func newToolEntry[In, Out any](t *mcp.Tool, h mcp.ToolHandlerFor[In, Out]) toolEntry {
+	return toolEntry{
+		tool: t,
+		add:  func(s *mcp.Server) { mcp.AddTool(s, t, h) },
+	}
+}
+
+// Register adds every tool to s and returns their names, in registration
+// order. The SDK has no way to list a server's tools, so this is how the
+// server learns what it registered.
+func Register(s *mcp.Server, r Registry) ([]string, error) {
 	if s == nil {
-		return ErrServerRequired()
+		return nil, ErrServerRequired()
 	}
 	if r == nil {
-		return ErrRegistryRequired()
+		return nil, ErrRegistryRequired()
 	}
 
+	var names []string
 	for _, ts := range toolsets(r) {
-		for _, add := range ts.tools {
-			add(s)
+		for _, entry := range ts.tools {
+			entry.add(s)
+			names = append(names, entry.tool.Name)
 		}
 	}
-	return nil
+	return names, nil
 }
 
 func toolsets(r Registry) []toolset {

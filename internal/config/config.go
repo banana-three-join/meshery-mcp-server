@@ -21,6 +21,7 @@ const (
 	keyTransportHost = "transport.host"
 	keyTransportPort = "transport.port"
 	keyLogLevel      = "log.level"
+	keyLogFormat     = "log.format"
 
 	envMesheryURL    = "MESHERY_SERVER_URL"
 	envMesheryToken  = "MESHERY_API_TOKEN" //nolint:gosec // G101: env var name, not a credential
@@ -29,12 +30,14 @@ const (
 	envTransportPort = "MESHERY_MCP_PORT"
 	envAccessKey     = "MESHERY_MCP_ACCESS_KEY" //nolint:gosec // G101: env var name, not a credential
 	envLogLevel      = "LOG_LEVEL"
+	envLogFormat     = "LOG_FORMAT"
 
 	defaultMesheryURL    = "http://localhost:9081"
 	defaultTransportMode = TransportStdio
 	defaultTransportHost = "127.0.0.1"
 	defaultTransportPort = 8080
 	defaultLogLevel      = LogLevelInfo
+	defaultLogFormat     = LogFormatText
 
 	// MinAccessKeyLength is the shortest HTTP access key accepted: 32
 	// characters, as produced by `openssl rand -hex 16` or longer.
@@ -55,6 +58,13 @@ const (
 	LogLevelInfo  = "info"
 	LogLevelWarn  = "warn"
 	LogLevelError = "error"
+)
+
+const (
+	// LogFormatText is human-readable key=value lines, for development.
+	LogFormatText = "text"
+	// LogFormatJSON is one JSON object per line, for log collectors.
+	LogFormatJSON = "json"
 )
 
 // TransportMode is how MCP clients reach the server.
@@ -112,7 +122,8 @@ type TransportConfig struct {
 
 // LogConfig holds logging settings.
 type LogConfig struct {
-	Level string `mapstructure:"level"` // one of the LogLevel* constants
+	Level  string `mapstructure:"level"`  // one of the LogLevel* constants
+	Format string `mapstructure:"format"` // one of the LogFormat* constants
 }
 
 // Flags holds command-line overrides. A nil field was not given on the
@@ -132,6 +143,7 @@ func Load(configPath string, flags Flags) (*Config, error) {
 	v.SetDefault(keyTransportHost, defaultTransportHost)
 	v.SetDefault(keyTransportPort, defaultTransportPort)
 	v.SetDefault(keyLogLevel, defaultLogLevel)
+	v.SetDefault(keyLogFormat, defaultLogFormat)
 
 	if configPath != "" {
 		v.SetConfigFile(configPath)
@@ -157,6 +169,7 @@ func Load(configPath string, flags Flags) (*Config, error) {
 	v.MustBindEnv(keyTransportHost, envTransportHost)
 	v.MustBindEnv(keyTransportPort, envTransportPort)
 	v.MustBindEnv(keyLogLevel, envLogLevel)
+	v.MustBindEnv(keyLogFormat, envLogFormat)
 
 	// Set has the highest precedence in Viper, above environment variables.
 	if flags.Transport != nil {
@@ -180,6 +193,7 @@ func Load(configPath string, flags Flags) (*Config, error) {
 		cfg.Transport.AccessKey = Secret(os.Getenv(envAccessKey))
 	}
 	cfg.Log.Level = strings.ToLower(strings.TrimSpace(cfg.Log.Level))
+	cfg.Log.Format = strings.ToLower(strings.TrimSpace(cfg.Log.Format))
 
 	if err := cfg.validate(); err != nil {
 		return nil, err
@@ -233,6 +247,12 @@ func (c *Config) validate() error {
 	case LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError:
 	default:
 		return ErrInvalidLogLevel(c.Log.Level)
+	}
+
+	switch c.Log.Format {
+	case LogFormatText, LogFormatJSON:
+	default:
+		return ErrInvalidLogFormat(c.Log.Format)
 	}
 	return nil
 }

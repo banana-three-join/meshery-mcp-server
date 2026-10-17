@@ -22,8 +22,8 @@ func relationshipToolset(r RelationshipRegistry) toolset {
 	h := &relationshipHandler{registry: r}
 	return toolset{
 		name: "relationships",
-		tools: []func(*mcp.Server){
-			func(s *mcp.Server) { mcp.AddTool(s, listRelationshipsTool, h.listRelationships) },
+		tools: []toolEntry{
+			newToolEntry(listRelationshipsTool, h.listRelationships),
 		},
 	}
 }
