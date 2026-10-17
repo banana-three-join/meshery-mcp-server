@@ -5,8 +5,10 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 
 	"github.com/meshery/meshkit/logger"
@@ -45,16 +47,32 @@ func main() {
 
 func run(log logger.Handler) error {
 	configPath := flag.String("config", "", "path to a YAML config file (optional)")
+	transport := flag.String("transport", "", "stdio or http (default stdio; env MESHERY_MCP_TRANSPORT)")
+	host := flag.String("host", "", "http only: loopback address to listen on (default 127.0.0.1; env MESHERY_MCP_HOST)")
+	port := flag.Int("port", 0, "http only: port to listen on (default 8080; env MESHERY_MCP_PORT)")
 	flag.Parse()
 
-	cfg, err := config.Load(*configPath)
+	// Only flags given on the command line override the environment and file.
+	var flags config.Flags
+	flag.Visit(func(f *flag.Flag) {
+		switch f.Name {
+		case "transport":
+			flags.Transport = transport
+		case "host":
+			flags.Host = host
+		case "port":
+			flags.Port = port
+		}
+	})
+
+	cfg, err := config.Load(*configPath, flags)
 	if err != nil {
 		return err
 	}
 	log.SetLevel(logrusLevel(cfg.Log.Level))
 
-	log.Infof("starting %s version=%s commit=%s meshery_url=%s token_configured=%t",
-		appName, version, commitsha, cfg.Meshery.RedactedURL(), cfg.Auth.Token != "")
+	log.Infof("starting %s version=%s commit=%s meshery_url=%s token_configured=%t transport=%s",
+		appName, version, commitsha, cfg.Meshery.RedactedURL(), cfg.Auth.Token != "", cfg.Transport.Mode)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -65,13 +83,23 @@ func run(log logger.Handler) error {
 		stop()
 	}()
 
-	err = mcpserver.RunStdio(ctx, mcpserver.Options{
+	opts := mcpserver.Options{
 		Name:        appName,
 		Version:     version,
 		Logger:      slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slogLevel(cfg.Log.Level)})),
 		Registry:    meshery.NewRegistry(meshery.NewClient(cfg.Meshery.URL)),
 		Credentials: auth.Resolver(cfg.Auth),
-	})
+	}
+
+	switch cfg.Transport.Mode {
+	case config.TransportHTTP:
+		err = mcpserver.RunHTTP(ctx, opts, mcpserver.HTTPOptions{
+			Addr:      net.JoinHostPort(cfg.Transport.Host, strconv.Itoa(cfg.Transport.Port)),
+			AccessKey: string(cfg.Transport.AccessKey),
+		})
+	default:
+		err = mcpserver.RunStdio(ctx, opts)
+	}
 	if err != nil {
 		return err
 	}

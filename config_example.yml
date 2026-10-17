@@ -5,16 +5,33 @@
 #   meshery-mcp-server --config config.local.yaml
 #
 # Every setting is optional. Precedence, lowest to highest:
-#   built-in defaults  <  this file  <  environment variables
+#   built-in defaults  <  this file  <  environment variables  <  flags
+# Only the transport settings have flags.
 #
-# The Meshery token is never read from this file. Set MESHERY_API_TOKEN in
-# the environment; a token in this file stops the server at startup.
+# Secrets are never read from this file: set MESHERY_API_TOKEN and
+# MESHERY_MCP_ACCESS_KEY in the environment. A secret in this file stops the
+# server at startup.
 
 meshery:
   # Meshery server to talk to.            Env: MESHERY_SERVER_URL
   # Inside a container, localhost is the container itself; use
   # http://host.docker.internal:9081 to reach Meshery on the host.
   url: http://localhost:9081
+
+transport:
+  # How MCP clients reach the server.     Flag: --transport  Env: MESHERY_MCP_TRANSPORT
+  #   stdio  the AI app starts the server and talks over stdin/stdout
+  #   http   Streamable HTTP at http://<host>:<port>/mcp
+  mode: stdio
+
+  # http only. Must be a loopback address (127.0.0.1, ::1, localhost):
+  # remote access needs OAuth, which is not implemented yet. Clients must
+  # also send "Authorization: Bearer <key>", where the key is
+  # MESHERY_MCP_ACCESS_KEY (env only, at least 32 characters).
+  #                                       Flag: --host  Env: MESHERY_MCP_HOST
+  host: 127.0.0.1
+  #                                       Flag: --port  Env: MESHERY_MCP_PORT
+  port: 8080
 
 log:
   # One of: debug, info, warn, error.     Env: LOG_LEVEL
